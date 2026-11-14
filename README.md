@@ -19,6 +19,23 @@ A macOS menu bar app (`NSStatusItem`) that shows 5-hour and weekly quota usage b
 open build/AIQuotaBar.app
 ```
 
+To package a local `.dmg`:
+
+```bash
+VERSION=0.1.0 ./scripts/build-app.sh --dmg
+```
+
+## Releases
+
+Pushing a `v*` tag triggers [release.yml](.github/workflows/release.yml) to run tests, build a universal binary, and attach `AIQuotaBar-<version>.dmg` to a GitHub Release:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+> Note: Builds without a `Developer ID Application` certificate are ad-hoc signed; after dragging to `/Applications` on another Mac, run `xattr -cr /Applications/AIQuotaBar.app` if Gatekeeper blocks first launch.
+
 ## Optional: Multiple Claude Profiles
 
 By default, `AIQuotaBar` checks `~/.claude`. To add extra `CLAUDE_CONFIG_DIR` profiles (such as `ccp`), create `~/.config/ai-quota-bar/config.json`:
