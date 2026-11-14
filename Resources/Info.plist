@@ -6,6 +6,8 @@
     <string>com.samuelnittala.ai-quota-bar</string>
     <key>CFBundleExecutable</key>
     <string>AIQuotaBar</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleName</key>
     <string>AIQuotaBar</string>
     <key>CFBundlePackageType</key>

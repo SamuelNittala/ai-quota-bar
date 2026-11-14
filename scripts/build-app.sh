@@ -27,6 +27,9 @@ rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/AIQuotaBar"
 cp "$ROOT_DIR/Resources/Info.plist" "$APP_DIR/Contents/Info.plist"
+if [[ -f "$ROOT_DIR/Resources/AppIcon.icns" ]]; then
+    cp "$ROOT_DIR/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
+fi
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP_DIR/Contents/Info.plist"
 
 if [[ -z "${CODESIGN_IDENTITY:-}" ]]; then
