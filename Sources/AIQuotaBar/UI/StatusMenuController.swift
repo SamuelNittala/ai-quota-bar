@@ -236,17 +236,11 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
     private func rebuildMenu() {
         menu.removeAllItems()
 
-        if isRefreshing {
-            let item = NSMenuItem(title: "Refreshing quotas…", action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            menu.addItem(item)
-            menu.addItem(.separator())
-        }
-
-        if currentResults.isEmpty && !isRefreshing {
-            let empty = NSMenuItem(title: "Click to load quotas", action: nil, keyEquivalent: "")
+        if currentResults.isEmpty {
+            let empty = NSMenuItem(title: "Loading quotas…", action: nil, keyEquivalent: "")
             empty.isEnabled = false
             menu.addItem(empty)
+            menu.addItem(.separator())
         } else {
             for result in currentResults {
                 appendSection(for: result)
