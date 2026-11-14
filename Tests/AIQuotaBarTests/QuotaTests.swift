@@ -161,6 +161,23 @@ final class QuotaTests: XCTestCase {
         )
         let aclResult = await aclFetcher.fetch()
         XCTAssertEqual(aclResult.error, .keychainInteractionRequired(service: "Claude Code-credentials"))
+
+        // Cooldown prevents repeated HTTP calls within 60s
+        let countLock = NSLock()
+        var httpCalls = 0
+        let cooldownFetcher = ClaudeFetcher(
+            profile: profile,
+            httpClient: MockHTTPClient { req in
+                countLock.withLock { httpCalls += 1 }
+                let resp = HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                return (usageJSON, resp)
+            },
+            keychainReader: MockKeychainReader(result: .success(secret)),
+            cooldownSeconds: 60
+        )
+        _ = await cooldownFetcher.fetch()
+        _ = await cooldownFetcher.fetch()
+        XCTAssertEqual(countLock.withLock { httpCalls }, 1)
     }
 
     func testCodexFetcherParsesRateLimits() throws {

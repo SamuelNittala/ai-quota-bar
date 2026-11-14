@@ -68,12 +68,17 @@ public final class ClaudeFetcher: QuotaProvider, @unchecked Sendable {
     private let profile: ClaudeProfile
     private let httpClient: HTTPClient
     private let keychainReader: KeychainReader
+    private let cooldownSeconds: TimeInterval
     private let now: @Sendable () -> Date
+    private let lock = NSLock()
+    private var lastSuccess: ProviderResult?
+    private var rateLimitedUntil: Date?
 
     public init(
         profile: ClaudeProfile,
         httpClient: HTTPClient = URLSessionHTTPClient(timeoutSeconds: 6.0),
         keychainReader: KeychainReader = SecurityKeychainReader(),
+        cooldownSeconds: TimeInterval = 60.0,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.providerId = profile.id
@@ -81,11 +86,32 @@ public final class ClaudeFetcher: QuotaProvider, @unchecked Sendable {
         self.profile = profile
         self.httpClient = httpClient
         self.keychainReader = keychainReader
+        self.cooldownSeconds = cooldownSeconds
         self.now = now
     }
 
     public func fetch() async -> ProviderResult {
         let fetchedAt = now()
+
+        if let cached = lock.withLock({ () -> ProviderResult? in
+            if let until = rateLimitedUntil, fetchedAt < until {
+                return ProviderResult(
+                    providerId: providerId,
+                    displayName: displayName,
+                    entries: lastSuccess?.entries ?? [],
+                    fetchedAt: lastSuccess?.fetchedAt ?? fetchedAt,
+                    isStale: lastSuccess != nil,
+                    error: .httpError(statusCode: 429, body: "Rate limited — retry shortly")
+                )
+            }
+            if let last = lastSuccess, fetchedAt.timeIntervalSince(last.fetchedAt) < cooldownSeconds {
+                return last
+            }
+            return nil
+        }) {
+            return cached
+        }
+
         do {
             let secretData = try keychainReader.readGenericPassword(
                 service: profile.keychainService,
@@ -106,18 +132,31 @@ public final class ClaudeFetcher: QuotaProvider, @unchecked Sendable {
                 let cmd = profile.id == "claude" ? "claude" : profile.label
                 return fail(.tokenExpired("Login expired — run \(cmd)"), at: fetchedAt)
             }
+            if http.statusCode == 429 {
+                let retryHeader = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init) ?? 0
+                let backoff = max(cooldownSeconds, retryHeader)
+                lock.withLock {
+                    rateLimitedUntil = fetchedAt.addingTimeInterval(backoff)
+                }
+                return fail(.httpError(statusCode: 429, body: "Rate limited — retry in \(Int(backoff))s"), at: fetchedAt)
+            }
             guard (200..<300).contains(http.statusCode) else {
                 let body = String(data: data, encoding: .utf8) ?? ""
                 return fail(.httpError(statusCode: http.statusCode, body: String(body.prefix(120))), at: fetchedAt)
             }
 
             let entry = try Self.parseUsageResponse(data, label: profile.label)
-            return ProviderResult(
+            let result = ProviderResult(
                 providerId: providerId,
                 displayName: displayName,
                 entries: [entry],
                 fetchedAt: fetchedAt
             )
+            lock.withLock {
+                lastSuccess = result
+                rateLimitedUntil = nil
+            }
+            return result
         } catch let err as ProviderError {
             return fail(err, at: fetchedAt)
         } catch let err as URLError where err.code == .timedOut {
